@@ -1,0 +1,227 @@
+// AI Context for Darts League App 🎯
+// Last updated: Current Session
+
+{
+  "appInfo": {
+    "name": "Darts League Web App",
+    "description": "A web-first application to manage a darts league with a sleek, dark-themed UI",
+    "lastUpdated": "2024-02-21"
+  },
+  "techStack": {
+    "framework": "React",
+    "buildTool": "Vite",
+    "language": "TypeScript",
+    "styling": "Chakra UI",
+    "routing": "React Router",
+    "stateManagement": "Redux Toolkit"
+  },
+  "currentIssues": {
+    "benchRotation": {
+      "description": "Players being benched incorrectly, especially in round 1",
+      "status": "in_progress",
+      "files": [
+        "src/utils/pairingLogic.ts",
+        "src/store/slices/gameSlice.ts",
+        "src/store/slices/pairingSlice.ts"
+      ],
+      "priority": "high",
+      "currentFixes": [
+        "Round 1 now ignores bench history",
+        "Added win rate tracking for optimal pairing",
+        "Fixed sorting logic for bench rotation"
+      ],
+      "remainingIssues": [
+        "Need to track pair win rates properly",
+        "Need to update UI to show pair win rates",
+        "Need to ensure bench rotation after round 1 works correctly"
+      ]
+    },
+    "pairingSystem": {
+      "description": "Pairing logic needs to prioritize win rates and fair play",
+      "status": "in_progress",
+      "files": [
+        "src/utils/pairingLogic.ts",
+        "src/store/slices/pairingSlice.ts"
+      ],
+      "priority": "high",
+      "currentState": {
+        "round1Logic": {
+          "sorting": "Only considers handicaps",
+          "pairing": "Uses historical win rates",
+          "benching": "Fresh start, no history considered"
+        },
+        "laterRoundsLogic": {
+          "sorting": "Considers bench history and rotation",
+          "pairing": "Balances win rates with pairing diversity",
+          "benching": "Prevents consecutive benching"
+        }
+      }
+    }
+  },
+  "implementedFeatures": {
+    "gameManagement": {
+      "boardInitialization": true,
+      "roundTransitions": true,
+      "winnerSelection": true,
+      "doveBonus": true,
+      "handicapSystem": true
+    },
+    "pairingSystem": {
+      "status": "partial",
+      "implemented": [
+        "Basic pairing logic",
+        "Pairing history tracking",
+        "Partner suggestions",
+        "Matrix visualization component",
+        "Win rate tracking structure",
+        "Round 1 special handling"
+      ],
+      "needsFixing": [
+        "Proper win rate tracking",
+        "UI updates for win rates",
+        "Bench rotation fairness"
+      ]
+    }
+  },
+  "dataStructures": {
+    "GamePairings": {
+      "pairings": "Array of round pairings with results",
+      "pairingCounts": "Tracks times players paired together",
+      "pairWins": "Tracks win count for each pair",
+      "lastBenchedRound": "Tracks last round each player was benched"
+    },
+    "PairingLogic": {
+      "round1": {
+        "sorting": "handicap based",
+        "pairing": "win rate based",
+        "benching": "fresh start"
+      },
+      "laterRounds": {
+        "sorting": "bench history + win rates",
+        "pairing": "diversity + win rates",
+        "benching": "rotation based"
+      }
+    }
+  },
+  "theme": {
+    "colors": {
+      "background": "#0B0C10",
+      "secondary": "#1F2833",
+      "tertiaryText": "#C5C6C7",
+      "highlights": "#66FCF1",
+      "secondaryHighlights": "#45A29E"
+    },
+    "components": {
+      "boards": "400px fixed width/height",
+      "buttons": "48px height",
+      "spacing": "6px multiples"
+    }
+  },
+  "projectStructure": {
+    "pages": {
+      "home": "Landing page with animations, stats, and feature cards",
+      "game": "Main game interface with boards, timer, and bench",
+      "players": "Player management page",
+      "setupWizard": "Game setup and configuration",
+      "gameStats": "End of game statistics and results",
+      "leaderboard": "Season rankings and player stats"
+    },
+    "components": {
+      "game": {
+        "GameBoard": "Individual game board with team displays and controls",
+        "GameTimer": "Countdown timer with controls",
+        "RoundInfo": "Round progress and info display",
+        "BenchDisplay": "Shows benched players",
+        "RoundPreview": "Preview next round matchups",
+        "PairingMatrix": "Visualize player pairing history"
+      },
+      "layout": {
+        "Navbar": "Main navigation with responsive design",
+        "ParticleBackground": "Animated background effects"
+      },
+      "common": {
+        "Button": "Reusable button component",
+        "PlayerCard": "Player information display",
+        "ScoreCard": "Score tracking component",
+        "FeatureCard": "Feature showcase component",
+        "StatBox": "Animated statistics display"
+      }
+    }
+  },
+  "features": {
+    "implemented": {
+      "gameManagement": {
+        "boardInitialization": "Random team assignments",
+        "roundTransitions": "Team promotions/relegations",
+        "winnerSelection": "With dove option",
+        "benchSystem": "Player rotation"
+      },
+      "ui": {
+        "responsiveLayout": "Mobile and desktop support",
+        "animations": "Page and component transitions",
+        "darkTheme": "Consistent styling"
+      }
+    },
+    "inProgress": [
+      "Game completion flow",
+      "Player statistics tracking",
+      "Sound effects"
+    ],
+    "planned": [
+      "Player handicaps",
+      "Game history",
+      "Tournament mode",
+      "Achievements system"
+    ],
+    "rules": {
+      "challengerMode": true,
+      "playerRotation": true,
+      "benchRotation": true,
+      "handicapSystem": true
+    }
+  },
+  "routes": {
+    "/": "Home page with quick actions and stats",
+    "/setup": "Game setup wizard",
+    "/game": "Active game screen",
+    "/players": "Player management"
+  },
+  "nextSteps": {
+    "immediate": [
+      "Implement win rate tracking in recordRoundPairings",
+      "Add win rate visualization to PairingMatrix",
+      "Test bench rotation with new logic",
+      "Add logging for pair win rates"
+    ],
+    "upcoming": [
+      "Add win streak tracking",
+      "Implement tournament mode",
+      "Add admin console"
+    ]
+  },
+  "rules": {
+    "benchRotation": {
+      "implemented": true,
+      "needsFixing": true,
+      "requirements": [
+        "Players CANNOT be benched in consecutive rounds",
+        "Players CANNOT be benched if others haven't been benched yet",
+        "Must rotate in after being benched",
+        "Players coming off win streak MUST be benched"
+      ]
+    },
+    "playerRotation": {
+      "implemented": true,
+      "requirements": [
+        "Pair with different players when possible",
+        "Pair with least-paired players when no new options",
+        "Maintain board hierarchy (A > B > C)",
+        "Handle promotions properly"
+      ]
+    }
+  },
+  "storage": {
+    "current": "Local Storage",
+    "planned": "Backend migration"
+  }
+} 

@@ -7,6 +7,7 @@ export interface PlayerStats {
   benched: number
   games: number
   lastBenchedRound?: number
+  consecutiveWins?: number  // Track consecutive wins for Board A rotation
 }
 
 export interface Player {

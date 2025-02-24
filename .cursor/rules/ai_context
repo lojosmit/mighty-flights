@@ -13,73 +13,100 @@
     "language": "TypeScript",
     "styling": "Chakra UI",
     "routing": "React Router",
-    "stateManagement": "Redux Toolkit"
+    "stateManagement": "Redux Toolkit",
+    "testing": "Jest + ts-jest"
   },
   "currentIssues": {
     "benchRotation": {
-      "description": "Players being benched incorrectly, especially in round 1",
-      "status": "in_progress",
+      "description": "Players being benched incorrectly",
+      "status": "fixed",
       "files": [
         "src/utils/pairingLogic.ts",
         "src/store/slices/gameSlice.ts",
         "src/store/slices/pairingSlice.ts"
       ],
-      "priority": "high",
-      "currentFixes": [
-        "Round 1 now ignores bench history",
-        "Added win rate tracking for optimal pairing",
-        "Fixed sorting logic for bench rotation"
-      ],
-      "remainingIssues": [
-        "Need to track pair win rates properly",
-        "Need to update UI to show pair win rates",
-        "Need to ensure bench rotation after round 1 works correctly"
+      "fixes": [
+        "Added proper bench validation",
+        "Implemented bench rotation rules",
+        "Added tests to verify bench rotation"
       ]
     },
     "pairingSystem": {
-      "description": "Pairing logic needs to prioritize win rates and fair play",
-      "status": "in_progress",
+      "description": "Challenger mode rules not being followed correctly",
+      "status": "fixed",
       "files": [
         "src/utils/pairingLogic.ts",
         "src/store/slices/pairingSlice.ts"
       ],
+      "fixes": [
+        "Implemented 3-win limit for Board A",
+        "Fixed winner retention logic",
+        "Added proper promotion system",
+        "Fixed board hierarchy maintenance",
+        "Added comprehensive test suite"
+      ]
+    },
+    "timer": {
+      "description": "Timer not resetting/starting for new rounds",
+      "status": "fixed",
+      "files": [
+        "src/pages/Game.tsx",
+        "src/components/game/GameTimer.tsx"
+      ],
+      "fixes": [
+        "Added proper timer reset in handleStartNextRound",
+        "Fixed timer state management"
+      ]
+    },
+    "roundEndingError": {
+      "description": "Failed to end round due to state handling issues",
+      "status": "pending",
       "priority": "high",
+      "files": [
+        "src/store/slices/gameSlice.ts",
+        "src/pages/Game.tsx"
+      ],
       "currentState": {
-        "round1Logic": {
-          "sorting": "Only considers handicaps",
-          "pairing": "Uses historical win rates",
-          "benching": "Fresh start, no history considered"
-        },
-        "laterRoundsLogic": {
-          "sorting": "Considers bench history and rotation",
-          "pairing": "Balances win rates with pairing diversity",
-          "benching": "Prevents consecutive benching"
-        }
-      }
+        "error": "Failed to end round when processing round history",
+        "cause": "Inconsistent board data structure between array and object formats",
+        "affectedFunctionality": "Round transitions and game progression"
+      },
+      "requiredFixes": [
+        "Update endRound thunk to properly handle board results",
+        "Fix round history format consistency",
+        "Add proper error handling in the thunk",
+        "Ensure consistent data structure between components"
+      ],
+      "nextSteps": [
+        "Review and fix data structure in roundHistory",
+        "Add error boundaries for round transitions",
+        "Implement proper type checking for board results",
+        "Add validation for round state updates"
+      ]
     }
   },
   "implementedFeatures": {
     "gameManagement": {
       "boardInitialization": true,
-      "roundTransitions": true,
+      "roundTransitions": false,
       "winnerSelection": true,
       "doveBonus": true,
-      "handicapSystem": true
+      "handicapSystem": true,
+      "timerControl": true
     },
     "pairingSystem": {
-      "status": "partial",
+      "status": "complete",
       "implemented": [
+        "Round 1 preview to actual match",
         "Basic pairing logic",
         "Pairing history tracking",
         "Partner suggestions",
         "Matrix visualization component",
         "Win rate tracking structure",
-        "Round 1 special handling"
-      ],
-      "needsFixing": [
-        "Proper win rate tracking",
-        "UI updates for win rates",
-        "Bench rotation fairness"
+        "Board hierarchy maintenance",
+        "Winner retention with 3-win limit",
+        "Proper promotions and relegations",
+        "Bench rotation rules"
       ]
     }
   },
@@ -188,10 +215,11 @@
   },
   "nextSteps": {
     "immediate": [
-      "Implement win rate tracking in recordRoundPairings",
-      "Add win rate visualization to PairingMatrix",
-      "Test bench rotation with new logic",
-      "Add logging for pair win rates"
+      "Fix challenger mode board hierarchy",
+      "Implement proper winner retention",
+      "Fix promotion logic for 1v1 winners",
+      "Implement proper relegation for losers",
+      "Ensure benched players get priority for pairing with promoted 1v1 winners"
     ],
     "upcoming": [
       "Add win streak tracking",
@@ -200,6 +228,16 @@
     ]
   },
   "rules": {
+    "challengerMode": {
+      "implemented": false,
+      "requirements": [
+        "Winners MUST stay on their board if they win (until 3 consecutive on Board A)",
+        "Winners from lower boards MUST be promoted",
+        "1v1 winners when promoted MUST get a partner (preferably from bench)",
+        "Losers MUST move down to lower boards",
+        "Board A must be 2v2 whenever possible"
+      ]
+    },
     "benchRotation": {
       "implemented": true,
       "needsFixing": true,
@@ -209,19 +247,30 @@
         "Must rotate in after being benched",
         "Players coming off win streak MUST be benched"
       ]
-    },
-    "playerRotation": {
-      "implemented": true,
-      "requirements": [
-        "Pair with different players when possible",
-        "Pair with least-paired players when no new options",
-        "Maintain board hierarchy (A > B > C)",
-        "Handle promotions properly"
-      ]
     }
   },
   "storage": {
     "current": "Local Storage",
     "planned": "Backend migration"
+  },
+  "testing": {
+    "framework": "Jest",
+    "coverage": {
+      "pairingLogic": {
+        "status": "tested",
+        "testCases": [
+          "Board A winner rotation",
+          "1v1 winner promotion",
+          "Board hierarchy",
+          "Bench rotation"
+        ],
+        "testFile": "src/utils/pairingLogic.test.ts"
+      }
+    },
+    "requiredTests": [
+      "Round ending and state transitions",
+      "Round history format validation",
+      "Error handling in game state updates"
+    ]
   }
 } 

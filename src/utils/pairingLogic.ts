@@ -20,6 +20,17 @@ interface PairingResult {
   bench: Player[]
 }
 
+interface PlayerStats {
+  wins: number
+  losses: number
+  doves: number
+  handicap: number
+  benched: number
+  games: number
+  lastBenchedRound?: number
+  consecutiveWins?: number
+}
+
 // Helper to calculate total times a player has been benched
 const getTotalBenchCount = (player: Player): number => {
   return player.stats.benched || 0
@@ -120,45 +131,11 @@ export const generatePairings = ({
   console.log('🎲 [generatePairings] Board count:', boardCount)
   console.log('🎲 [generatePairings] Promoted players:', promotedPlayers.map(p => p.name))
 
-  // Sort players by priority:
-  const sortedPlayers = [...availablePlayers].sort((a, b) => {
-    // Round 1 is special - only consider handicaps for initial sorting
-    if (currentRound === 1) {
-      return b.stats.handicap - a.stats.handicap
-    }
-
-    // After round 1, use full sorting logic
-    const aWasRecentlyBenched = wasRecentlyBenched(a, currentRound)
-    const bWasRecentlyBenched = wasRecentlyBenched(b, currentRound)
-    
-    // Log bench status
-    console.log(`🎲 [sortPlayers] Comparing ${a.name} (recent: ${aWasRecentlyBenched}, count: ${getTotalBenchCount(a)}) vs ${b.name} (recent: ${bWasRecentlyBenched}, count: ${getTotalBenchCount(b)})`)
-    
-    // If either was recently benched, they should NOT be benched again
-    // This is now a HARD rule - recently benched players MUST be sorted first
-    if (aWasRecentlyBenched && !bWasRecentlyBenched) return -1  // a should be FIRST (not benched)
-    if (bWasRecentlyBenched && !aWasRecentlyBenched) return 1   // b should be FIRST (not benched)
-
-    // STRONGLY prioritize players who have been benched less
-    const aBenchCount = getTotalBenchCount(a)
-    const bBenchCount = getTotalBenchCount(b)
-    if (aBenchCount !== bBenchCount) {
-      console.log(`🎲 [sortPlayers] ${a.name} bench count ${aBenchCount} vs ${b.name} bench count ${bBenchCount}`)
-      // Lower bench count = less likely to be benched (should be LAST in sort)
-      return aBenchCount - bBenchCount
-    }
-
-    // If bench counts are equal, prioritize who was benched longer ago
-    const aLastBenched = a.stats.lastBenchedRound || 0
-    const bLastBenched = b.stats.lastBenchedRound || 0
-    if (aLastBenched !== bLastBenched) {
-      // More recent bench = more likely to be benched again
-      return aLastBenched - bLastBenched
-    }
-
-    // If all else is equal, mix skill levels
-    return b.stats.handicap - a.stats.handicap
-  })
+  // Round 1 should never be generated here - it should come from preview
+  if (currentRound === 1) {
+    console.error('🚨 generatePairings called for round 1 - this should not happen!')
+    throw new Error('Round 1 pairings should come from preview')
+  }
 
   const result: PairingResult = {
     boards: [],
@@ -168,166 +145,211 @@ export const generatePairings = ({
   // Track which players have been assigned
   const usedPlayers = new Set<string>()
 
-  // Function to find the best partner for a player
-  const findBestPartner = (player: Player, usedPlayers: Set<string>): Player | null => {
-    console.log(`🎲 [findBestPartner] Finding partner for ${player.name}`)
-    console.log(`🎲 [findBestPartner] Already used players:`, 
-      [...usedPlayers].map(id => availablePlayers.find(p => p.id === id)?.name)
+  // Helper to get board winners
+  const getBoardWinners = (boardId: string): Player[] => {
+    if (!previousRoundBoards) return []
+    const board = previousRoundBoards.find(b => b.boardId === boardId)
+    if (!board) return []
+    return promotedPlayers.filter(p => 
+      board.team1.some(t => t.id === p.id) ||
+      board.team2.some(t => t.id === p.id)
     )
+  }
 
-    // Get all available partners sorted by win rate and pairing count
-    const availablePartners = sortedPlayers
-      .filter(p => p.id !== player.id && !usedPlayers.has(p.id))
-      .sort((a, b) => {
-        // For round 1, only consider win rates
-        if (currentRound === 1) {
-          const aWinRate = getPairWinRate(player, a, pairingHistory)
-          const bWinRate = getPairWinRate(player, b, pairingHistory)
-          return bWinRate - aWinRate // Higher win rate first
+  // 1. Handle Board A first (highest priority)
+  const boardA: PairingResult['boards'][0] = {
+    boardId: 'A',
+    team1: [],
+    team2: []
+  }
+
+  // Get Board A winners from last round
+  const boardAWinners = getBoardWinners('A')
+  
+  // Keep Board A winners together if they won and haven't won 3 consecutive times
+  if (boardAWinners.length === 2) {
+    const consecutiveWins = boardAWinners[0].stats.consecutiveWins || 0
+    if (consecutiveWins < 3) {
+      console.log('🏆 [Board A] Winners staying:', boardAWinners.map(p => p.name))
+      boardA.team1 = boardAWinners
+      boardAWinners.forEach(p => usedPlayers.add(p.id))
+    } else {
+      console.log('🔄 [Board A] Winners reached 3 consecutive wins, rotating out')
+      // They'll be handled in lower board assignments
+    }
+  }
+
+  // 2. Handle promotions from lower boards
+  const promotedFromLower = promotedPlayers.filter(p => {
+    if (!previousRoundBoards) return false
+    const previousBoard = getPreviousBoard(p, previousRoundBoards)
+    return previousBoard && previousBoard !== 'A'
+  })
+
+  if (promotedFromLower.length > 0) {
+    console.log('⬆️ [Promotions] Players promoted:', promotedFromLower.map(p => p.name))
+    
+    // Group promoted players by their previous board
+    const promotedByBoard = new Map<string, Player[]>()
+    promotedFromLower.forEach(p => {
+      const prevBoard = getPreviousBoard(p, previousRoundBoards)
+      if (prevBoard) {
+        const existing = promotedByBoard.get(prevBoard) || []
+        promotedByBoard.set(prevBoard, [...existing, p])
+      }
+    })
+
+    // Handle promotions board by board, starting from highest ranked board
+    const boards = Array.from(promotedByBoard.keys()).sort()
+    for (const boardId of boards) {
+      const promoted = promotedByBoard.get(boardId) || []
+      
+      // If they won as a pair, keep them together
+      if (promoted.length === 2 && !promoted.some(p => usedPlayers.has(p.id))) {
+        if (boardA.team1.length === 0) {
+          boardA.team1 = promoted
+        } else if (boardA.team2.length === 0) {
+          boardA.team2 = promoted
         }
-
-        // After round 1, balance win rates with pairing counts
-        const aCount = pairingHistory.pairingCounts[player.id]?.[a.id] || 0
-        const bCount = pairingHistory.pairingCounts[player.id]?.[b.id] || 0
-        if (aCount !== bCount) return aCount - bCount
-
-        // If pairing counts are equal, prefer higher win rate
-        const aWinRate = getPairWinRate(player, a, pairingHistory)
-        const bWinRate = getPairWinRate(player, b, pairingHistory)
-        return bWinRate - aWinRate
-      })
-
-    // Try to find someone they haven't played with (after round 1)
-    if (currentRound > 1) {
-      const newPartner = availablePartners.find(p => 
-        !pairingHistory.pairingCounts[player.id]?.[p.id]
-      )
-      if (newPartner) return newPartner
-    }
-
-    // Get the best available partner based on sorting
-    return availablePartners[0] || null
-  }
-
-  // First, handle promoted players
-  for (const player of promotedPlayers) {
-    if (!usedPlayers.has(player.id) && wasInSoloMatch(player, previousRoundBoards)) {
-      console.log(`🎲 [generatePairings] ${player.name} promoted from 1v1, finding partner...`)
-      const partner = findBestPartner(player, usedPlayers)
-      if (partner) {
-        console.log(`🎲 [generatePairings] Pairing promoted player ${player.name} with ${partner.name}`)
-        const boardId = String.fromCharCode(65 + result.boards.length)
-        result.boards.push({
-          boardId,
-          team1: [player, partner],
-          team2: []
-        })
-        usedPlayers.add(player.id)
-        usedPlayers.add(partner.id)
+        promoted.forEach(p => usedPlayers.add(p.id))
+      } 
+      // If they won in 1v1, pair with someone from bench or available pool
+      else {
+        for (const player of promoted) {
+          if (usedPlayers.has(player.id)) continue
+          
+          if (wasInSoloMatch(player, previousRoundBoards)) {
+            // Try to pair with someone from bench first
+            const benchedLastRound = availablePlayers.find(p => 
+              !usedPlayers.has(p.id) && 
+              wasRecentlyBenched(p, currentRound)
+            )
+            
+            if (benchedLastRound) {
+              if (boardA.team1.length === 0) {
+                boardA.team1 = [player, benchedLastRound]
+              } else if (boardA.team2.length === 0) {
+                boardA.team2 = [player, benchedLastRound]
+              }
+              usedPlayers.add(player.id)
+              usedPlayers.add(benchedLastRound.id)
+            }
+          }
+        }
       }
     }
   }
 
-  // Then handle remaining players
-  for (const player of sortedPlayers) {
-    if (usedPlayers.has(player.id)) continue
+  // 3. Fill remaining Board A slots if needed
+  const remainingForBoardA = availablePlayers.filter(p => !usedPlayers.has(p.id))
+  if (boardA.team1.length === 0 && remainingForBoardA.length >= 4) {
+    // Prioritize players who lost on Board A last round
+    const boardALosers = previousRoundBoards
+      ? previousRoundBoards
+          .find(b => b.boardId === 'A')
+          ?.team1.concat(previousRoundBoards.find(b => b.boardId === 'A')?.team2 || [])
+          .filter(p => !promotedPlayers.some(pp => pp.id === p.id)) || []
+      : []
+    
+    const remainingPlayers = [
+      ...boardALosers,
+      ...remainingForBoardA.filter(p => !boardALosers.some(l => l.id === p.id))
+    ]
 
-    const partner = findBestPartner(player, usedPlayers)
-    if (partner && result.boards.length < boardCount) {
-      const boardId = String.fromCharCode(65 + result.boards.length)
-      
-      // If this board exists (from promoted players), add as team2
-      const existingBoard = result.boards.find(b => b.boardId === boardId)
-      if (existingBoard && existingBoard.team2.length === 0) {
-        existingBoard.team2 = [player, partner]
-      } else {
-        result.boards.push({
-          boardId,
-          team1: [player, partner],
-          team2: []
-        })
+    if (remainingPlayers.length >= 4) {
+      boardA.team1 = [remainingPlayers[0], remainingPlayers[1]]
+      boardA.team2 = [remainingPlayers[2], remainingPlayers[3]]
+      remainingPlayers.slice(0, 4).forEach(p => usedPlayers.add(p.id))
+    }
+  } else if (boardA.team2.length === 0 && remainingForBoardA.length >= 2) {
+    boardA.team2 = [remainingForBoardA[0], remainingForBoardA[1]]
+    usedPlayers.add(remainingForBoardA[0].id)
+    usedPlayers.add(remainingForBoardA[1].id)
+  }
+
+  result.boards.push(boardA)
+
+  // Handle lower boards (B, C, etc.)
+  for (let i = 1; i < boardCount; i++) {
+    const boardId = String.fromCharCode(65 + i)
+    const remainingForBoard = availablePlayers.filter(p => !usedPlayers.has(p.id))
+    
+    // Get players who lost on the previous board
+    const previousBoardLosers = previousRoundBoards
+      ? previousRoundBoards
+          .find(b => b.boardId === String.fromCharCode(65 + i - 1))
+          ?.team1.concat(previousRoundBoards.find(b => b.boardId === String.fromCharCode(65 + i - 1))?.team2 || [])
+          .filter(p => !promotedPlayers.some(pp => pp.id === p.id)) || []
+      : []
+    
+    // Prioritize losers from previous board
+    const playersForBoard = [
+      ...previousBoardLosers,
+      ...remainingForBoard.filter(p => !previousBoardLosers.some(l => l.id === p.id))
+    ]
+    
+    if (playersForBoard.length >= 4) {
+      // Create 2v2 match
+      const board = {
+        boardId,
+        team1: [playersForBoard[0], playersForBoard[1]],
+        team2: [playersForBoard[2], playersForBoard[3]]
       }
-      
-      usedPlayers.add(player.id)
-      usedPlayers.add(partner.id)
+      result.boards.push(board)
+      playersForBoard.slice(0, 4).forEach(p => usedPlayers.add(p.id))
+    } else if (playersForBoard.length >= 2) {
+      // Create 1v1 match
+      const board = {
+        boardId,
+        team1: [playersForBoard[0]],
+        team2: [playersForBoard[1]]
+      }
+      result.boards.push(board)
+      playersForBoard.slice(0, 2).forEach(p => usedPlayers.add(p.id))
     }
   }
 
   // Any remaining players go to bench
-  result.bench = sortedPlayers.filter(p => !usedPlayers.has(p.id))
+  result.bench = availablePlayers.filter(p => !usedPlayers.has(p.id))
   
-  // Safety check - NEVER bench players who were benched in the previous round
-  const safeToPlay = result.bench.filter(p => !wasRecentlyBenched(p, currentRound))
-  const mustPlay = result.bench.filter(p => wasRecentlyBenched(p, currentRound))
-  
-  if (mustPlay.length > 0) {
-    console.log(`🚨 [bench] Found ${mustPlay.length} players that cannot be benched:`, mustPlay.map(p => p.name))
-    // Try to swap these players with already assigned players who can be benched
-    mustPlay.forEach(player => {
-      // Find a safe player to bench instead
-      const boardPlayers = result.boards.flatMap(b => [...b.team1, ...b.team2])
-      const safeToSwap = boardPlayers.find(p => !wasRecentlyBenched(p, currentRound))
-      
-      if (safeToSwap) {
-        console.log(`🔄 [bench] Swapping ${player.name} with ${safeToSwap.name} to prevent consecutive benching`)
-        // Remove the player from bench
-        result.bench = result.bench.filter(p => p.id !== player.id)
-        // Add the safe player to bench
-        result.bench.push(safeToSwap)
-        // Replace the safe player with our must-play player in their board
-        result.boards = result.boards.map(board => ({
-          ...board,
-          team1: board.team1.map(p => p.id === safeToSwap.id ? player : p),
-          team2: board.team2.map(p => p.id === safeToSwap.id ? player : p)
-        }))
+  // Validate bench rules
+  const cantBench = result.bench.filter(p => 
+    promotedPlayers.some(pp => pp.id === p.id) ||
+    wasRecentlyBenched(p, currentRound)
+  )
+
+  if (cantBench.length > 0) {
+    console.warn('🚨 [Bench] Players that cannot be benched:', cantBench.map(p => p.name))
+    // Try to swap them with players who can be benched
+    const canBeBenched = availablePlayers.filter(p => 
+      !result.bench.some(b => b.id === p.id) &&
+      !promotedPlayers.some(pp => pp.id === p.id) &&
+      !wasRecentlyBenched(p, currentRound)
+    )
+
+    cantBench.forEach(player => {
+      const replacement = canBeBenched.find(p => !usedPlayers.has(p.id))
+      if (replacement) {
+        // Find this player in a team and swap
+        for (const board of result.boards) {
+          const team1Idx = board.team1.findIndex(p => p.id === replacement.id)
+          const team2Idx = board.team2.findIndex(p => p.id === replacement.id)
+          
+          if (team1Idx !== -1) {
+            board.team1[team1Idx] = player
+            result.bench = result.bench.filter(p => p.id !== player.id)
+            result.bench.push(replacement)
+            break
+          } else if (team2Idx !== -1) {
+            board.team2[team2Idx] = player
+            result.bench = result.bench.filter(p => p.id !== player.id)
+            result.bench.push(replacement)
+            break
+          }
+        }
       }
     })
   }
-  
-  // Log bench decisions
-  result.bench.forEach(player => {
-    console.log(`🪑 [bench] ${player.name} benched because:`)
-    console.log(`   - Total times benched: ${getTotalBenchCount(player)}`)
-    console.log(`   - Last benched round: ${player.stats.lastBenchedRound || 'never'}`)
-    console.log(`   - Recently benched: ${wasRecentlyBenched(player, currentRound)}`)
-  })
-
-  // If we have incomplete boards (missing team2), try to fill with bench players
-  result.boards.forEach(board => {
-    if (board.team2.length === 0 && result.bench.length >= 2) {
-      // Try to find a new pairing for team2
-      const player1 = result.bench[0]
-      const partner = findBestPartner(player1, usedPlayers)
-      if (partner) {
-        result.bench = result.bench.filter(p => p.id !== player1.id && p.id !== partner.id)
-        board.team2 = [player1, partner]
-        usedPlayers.add(player1.id)
-        usedPlayers.add(partner.id)
-      }
-    }
-  })
-
-  // If we still have incomplete boards, convert them to 1v1
-  result.boards.forEach(board => {
-    if (board.team2.length === 0 && result.bench.length >= 1) {
-      const player = result.bench.shift()!
-      board.team2 = [player]
-      // Convert team1 to single player if it has 2
-      if (board.team1.length === 2) {
-        result.bench.push(board.team1[1])
-        board.team1 = [board.team1[0]]
-      }
-    }
-  })
-
-  // Log final pairings
-  console.log('🎲 [generatePairings] Final pairings:')
-  result.boards.forEach(board => {
-    console.log(`   Board ${board.boardId}:`)
-    console.log(`     Team 1: ${board.team1.map(p => p.name).join(', ')}`)
-    console.log(`     Team 2: ${board.team2.map(p => p.name).join(', ')}`)
-  })
-  console.log('   Bench:', result.bench.map(p => p.name).join(', '))
 
   return result
 }

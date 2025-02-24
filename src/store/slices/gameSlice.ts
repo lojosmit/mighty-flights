@@ -5,39 +5,24 @@ import { initializeGame as initializePairings } from './pairingSlice'
 import { AppDispatch } from '../store'
 import { RootState } from '../store'
 import { generatePairings } from '../../utils/pairingLogic'
-
-interface TeamAssignment {
-  team1: Player[]
-  team2: Player[]
-}
+import { GameState, TeamAssignment } from '../../types/game'
 
 interface BoardResults {
   [boardId: string]: {
     winner: 'team1' | 'team2'
-    isDove: boolean
+    isDove?: boolean
   }
 }
 
 interface RoundStats {
-  boards: { [boardId: string]: TeamAssignment }
-  results: BoardResults
+  boards: {
+    boardId: string
+    team1: Player[]
+    team2: Player[]
+    winner?: 'team1' | 'team2'
+    isDove?: boolean
+  }[]
   bench: Player[]
-}
-
-interface GameState {
-  isActive: boolean
-  players: Player[]
-  boards: { [boardId: string]: TeamAssignment }
-  bench: Player[]
-  boardCount: number
-  roundTime: number
-  totalRounds: number
-  currentRound: number
-  roundHistory: { [round: number]: RoundStats }
-  gameStats: {
-    roundsPlayed: number
-    totalDoves: number
-  }
 }
 
 const initialState: GameState = {
@@ -45,14 +30,15 @@ const initialState: GameState = {
   players: [],
   boards: {},
   bench: [],
-  boardCount: 0,
-  roundTime: 0,
-  totalRounds: 0,
+  boardCount: 2,
+  roundTime: 300,
+  totalRounds: 10,
   currentRound: 1,
   roundHistory: {},
   gameStats: {
-    roundsPlayed: 0,
-    totalDoves: 0
+    doves: 0,
+    totalGames: 0,
+    roundsPlayed: 0
   }
 }
 
@@ -71,58 +57,54 @@ export const startGame = createAsyncThunk(
       roundTime: payload.roundTime,
       totalRounds: payload.totalRounds
     })
-    
-    // Initialize the game state
+
+    // Initialize game state
     dispatch(initializeGame(payload))
-    
-    // Initialize the pairing system with a unique game ID
-    const gameId = Date.now().toString()
-    console.log('🎮 [startGame] Initializing pairing system with gameId:', gameId)
-    
-    dispatch(initializePairings({
-      players: payload.players,
-      gameId
-    }))
 
-    // Generate initial pairings
-    console.log('🎮 [startGame] Generating initial pairings...')
-    const initialPairings = generatePairings({
-      availablePlayers: payload.players,
-      boardCount: payload.boardCount,
-      pairingHistory: {
-        pairings: [],
-        pairingCounts: {},
-        lastBenchedRound: {}
-      },
-      currentRound: 1
-    })
+    // For round 1, use the stored preview pairings instead of generating new ones
+    const storedPairings = localStorage.getItem('firstRoundPairings')
+    let boardsObj: { [key: string]: TeamAssignment } = {}
+    let benchPlayers: Player[] = []
 
-    console.log('🎮 [startGame] Initial pairings generated:', {
-      boards: initialPairings.boards.map(b => ({
-        boardId: b.boardId,
-        team1: b.team1.map(p => p.name),
-        team2: b.team2.map(p => p.name)
-      })),
-      bench: initialPairings.bench.map(p => p.name)
-    })
+    if (storedPairings) {
+      const { boards, bench } = JSON.parse(storedPairings)
+      // Convert stored pairings to the correct format
+      boards.forEach(board => {
+        boardsObj[board.board] = {
+          team1: board.players.team1,
+          team2: board.players.team2
+        }
+      })
+      benchPlayers = bench
+      // Clear stored pairings as they're no longer needed
+      localStorage.removeItem('firstRoundPairings')
+    } else {
+      console.warn('🚨 No stored preview pairings found, this should not happen!')
+      // Fallback to random pairings if something went wrong
+      const initialPairings = generatePairings({
+        availablePlayers: payload.players,
+        boardCount: payload.boardCount,
+        pairingHistory: { pairingCounts: {}, pairWins: {}, pairings: [], lastBenchedRound: {} },
+        currentRound: 1
+      })
 
-    // Update the boards with initial pairings
-    const boardsObj = initialPairings.boards.reduce((acc, board) => ({
-      ...acc,
-      [board.boardId]: {
-        team1: board.team1,
-        team2: board.team2
-      }
-    }), {})
+      initialPairings.boards.forEach(board => {
+        boardsObj[board.boardId] = {
+          team1: board.team1,
+          team2: board.team2
+        }
+      })
+      benchPlayers = initialPairings.bench
+    }
 
     console.log('🎮 [startGame] Updating boards with:', {
       boards: Object.keys(boardsObj),
-      benchCount: initialPairings.bench.length
+      benchCount: benchPlayers.length
     })
 
     dispatch(updateBoards({
       boards: boardsObj,
-      bench: initialPairings.bench
+      bench: benchPlayers
     }))
 
     return payload
@@ -132,81 +114,70 @@ export const startGame = createAsyncThunk(
 // Async thunk for ending a round
 export const endRound = createAsyncThunk(
   'game/endRound',
-  async (payload: { boardResults: BoardResults }, { getState, dispatch }) => {
+  async (payload: { boardResults: BoardResults }, { getState }) => {
     const state = getState() as RootState
-    const { currentRound, roundHistory, boards, players, bench } = state.game
+    const { boards, currentRound } = state.game
+    const promotedPlayers: Player[] = []
 
-    console.log('🎯 [endRound] Starting round:', currentRound)
-    console.log('🎯 [endRound] History size before:', Object.keys(roundHistory).length)
+    // Track winners and update stats
+    Object.entries(boards).forEach(([boardId, board]) => {
+      if (!payload.boardResults[boardId]?.winner) return
 
-    // Save current round to history
-    const roundStats: RoundStats = {
-      boards: { ...boards },
-      results: { ...payload.boardResults },
-      bench: [...bench]
-    }
+      const winner = payload.boardResults[boardId].winner
+      const winningTeam = winner === 'team1' ? board.team1 : board.team2
+      const losingTeam = winner === 'team1' ? board.team2 : board.team1
 
-    // Update player stats
-    const updatedPlayers = players.map(player => {
-      const stats = { ...player.stats }
-      let wasInGame = false
-
-      // Check each board
-      Object.entries(boards).forEach(([boardId, board]) => {
-        const result = payload.boardResults[boardId]
-        if (!result) return
-
-        // Check if player was on winning team
-        const wasOnTeam1 = board.team1.some(p => p.id === player.id)
-        const wasOnTeam2 = board.team2.some(p => p.id === player.id)
-        
-        if (wasOnTeam1 || wasOnTeam2) {
-          wasInGame = true
-          stats.games = (stats.games || 0) + 1
-          
-          if ((wasOnTeam1 && result.winner === 'team1') || 
-              (wasOnTeam2 && result.winner === 'team2')) {
-            stats.wins++
-            if (result.isDove) stats.doves++
+      winningTeam.forEach(player => {
+        promotedPlayers.push({
+          ...player,
+          stats: {
+            ...player.stats,
+            consecutiveWins: boardId === 'A' 
+              ? (player.stats.consecutiveWins || 0) + 1 
+              : 0
           }
-        }
+        })
       })
 
-      // Update bench count if player was benched
-      if (!wasInGame) {
-        stats.benched = (stats.benched || 0) + 1
-        stats.lastBenchedRound = currentRound
-        console.log(`🎯 [endRound] ${player.name} was benched, total: ${stats.benched}, last round: ${currentRound}`)
-      }
-
-      return {
-        ...player,
-        stats
-      }
+      losingTeam.forEach(player => {
+        // Reset consecutive wins for losers
+        player.stats.consecutiveWins = 0
+      })
     })
 
-    // Save round to history
-    const newHistory = {
-      ...roundHistory,
-      [currentRound]: roundStats
+    // Record round stats
+    const roundStats: RoundStats = {
+      boards: Object.entries(boards).map(([boardId, board]) => ({
+        boardId,
+        team1: board.team1,
+        team2: board.team2,
+        winner: payload.boardResults[boardId]?.winner,
+        isDove: payload.boardResults[boardId]?.isDove
+      })),
+      bench: state.game.bench
     }
 
-    console.log('🎯 [endRound] Saved round to history:', currentRound)
-    console.log('🎯 [endRound] History size after:', Object.keys(newHistory).length)
-    console.log('🎯 [endRound] Round history keys:', Object.keys(newHistory))
-
-    // Increment round number BEFORE generating new pairings
-    const nextRound = currentRound + 1
-
     return {
-      roundHistory: newHistory,
-      players: updatedPlayers,
-      nextRound
+      roundHistory: {
+        ...state.game.roundHistory,
+        [currentRound]: roundStats
+      },
+      players: state.game.players.map(player => {
+        const promoted = promotedPlayers.find(p => p.id === player.id)
+        return promoted || {
+          ...player,
+          stats: {
+            ...player.stats,
+            consecutiveWins: 0
+          }
+        }
+      }),
+      nextRound: currentRound + 1
     }
   }
 )
 
-const gameSlice = createSlice({
+export const gameSlice = createSlice({
   name: 'game',
   initialState,
   reducers: {
@@ -225,8 +196,9 @@ const gameSlice = createSlice({
       state.currentRound = 1
       state.roundHistory = {}
       state.gameStats = {
-        roundsPlayed: 0,
-        totalDoves: 0
+        doves: 0,
+        totalGames: 0,
+        roundsPlayed: 0
       }
       console.log('🎮 [initializeGame] Game state initialized:', {
         players: players.length,
@@ -246,6 +218,9 @@ const gameSlice = createSlice({
         benchCount: action.payload.bench.length
       })
     },
+    startNextRound: (state) => {
+      console.log('🎮 [startNextRound] Starting round:', state.currentRound)
+    },
     endGame: (state) => {
       state.isActive = false
       console.log('🎮 [endGame] Game ended')
@@ -254,10 +229,30 @@ const gameSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(endRound.fulfilled, (state, action) => {
-        state.roundHistory = action.payload.roundHistory
+        // Convert array of boards to object format for history
+        const boardsObject: { [key: string]: TeamAssignment } = {}
+        const currentRoundStats = action.payload.roundHistory[state.currentRound]
+        if (currentRoundStats && Array.isArray(currentRoundStats.boards)) {
+          currentRoundStats.boards.forEach(board => {
+            boardsObject[board.boardId] = {
+              team1: board.team1,
+              team2: board.team2,
+              winner: board.winner,
+              isDove: board.isDove
+            }
+          })
+
+          state.roundHistory[state.currentRound] = {
+            boards: boardsObject,
+            bench: currentRoundStats.bench
+          }
+        }
+
         state.players = action.payload.players
         state.currentRound = action.payload.nextRound
         state.gameStats.roundsPlayed++
+        state.gameStats.doves += Object.values(boardsObject)
+          .filter(board => board.isDove).length
 
         // Only log bench stats for players who were actually benched
         state.players.forEach(player => {
@@ -282,7 +277,8 @@ const gameSlice = createSlice({
 export const {
   initializeGame,
   updateBoards,
-  endGame
+  endGame,
+  startNextRound
 } = gameSlice.actions
 
 export default gameSlice.reducer 

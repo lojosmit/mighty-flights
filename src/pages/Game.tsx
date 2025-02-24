@@ -15,8 +15,8 @@ import { GameTimer } from '../components/game/GameTimer'
 import { GameBoard } from '../components/game/GameBoard'
 import { RoundInfo } from '../components/game/RoundInfo'
 import { RoundPreview } from '../components/game/RoundPreview'
-import { RootState } from '../store/store'
-import { endRound, endGame, updateBoards } from '../store/slices/gameSlice'
+import { RootState, AppDispatch } from '../store/store'
+import { endRound, endGame, updateBoards, startNextRound } from '../store/slices/gameSlice'
 import { recordRoundPairings } from '../store/slices/pairingSlice'
 import { generatePairings } from '../utils/pairingLogic'
 import { Player } from '../types/player'
@@ -27,7 +27,7 @@ import { useNavigate } from 'react-router-dom'
 export const Game = () => {
   const game = useSelector((state: RootState) => state.game)
   const pairings = useSelector((state: RootState) => state.pairings)
-  const dispatch = useDispatch()
+  const dispatch = useDispatch<AppDispatch>()
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -196,9 +196,32 @@ export const Game = () => {
       })
   }
 
-  const handleStartRound = () => {
+  const handleStartNextRound = () => {
+    // Reset and start timer for new round
+    if (timerRef.current) {
+      timerRef.current.reset()
+      // Small delay to ensure UI is ready
+      setTimeout(() => {
+        if (timerRef.current) {
+          timerRef.current.start()
+        }
+      }, 100)
+    }
+    
+    // Start next round logic
+    dispatch(startNextRound())
     setShowPreview(false)
     setTimerAutoStart(true)
+
+    // Show round start toast
+    toast({
+      title: `Round ${game.currentRound} Start! 🎯`,
+      description: "Timer started, good luck!",
+      status: "info",
+      duration: 3000,
+      isClosable: true,
+      position: "top"
+    })
   }
 
   const handleGameComplete = () => {
@@ -302,7 +325,7 @@ export const Game = () => {
       <RoundPreview
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
-        onStart={handleStartRound}
+        onStart={handleStartNextRound}
         roundNumber={game.currentRound}
         boards={game.boards}
         bench={game.bench}

@@ -36,13 +36,13 @@ export const MatchPreview = ({ config }: MatchPreviewProps) => {
     const boards: BoardAssignment[] = []
     const bench: Player[] = []
 
-    // Shuffle players randomly for initial pairing
+    // Shuffle players completely randomly using Fisher-Yates algorithm
     for (let i = players.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [players[i], players[j]] = [players[j], players[i]]
     }
 
-    // Assign players to boards
+    // Fill boards in order, no special logic, just take players as they come
     for (let i = 0; i < config.boardCount; i++) {
       const boardLetter = String.fromCharCode(65 + i) // A, B, C, etc.
       const assignment: BoardAssignment = {
@@ -53,12 +53,12 @@ export const MatchPreview = ({ config }: MatchPreviewProps) => {
         }
       }
 
-      // Try to assign 2v2 if possible
+      // Try to fill 2v2 first
       if (players.length >= 4) {
         assignment.players.team1 = players.splice(0, 2)
         assignment.players.team2 = players.splice(0, 2)
       } 
-      // Fall back to 1v1 if not enough players
+      // If not enough for 2v2, do 1v1
       else if (players.length >= 2) {
         assignment.players.team1 = [players.splice(0, 1)[0]]
         assignment.players.team2 = [players.splice(0, 1)[0]]
@@ -67,8 +67,11 @@ export const MatchPreview = ({ config }: MatchPreviewProps) => {
       boards.push(assignment)
     }
 
-    // Remaining players go to bench
+    // Any remaining players go to bench
     bench.push(...players)
+
+    // Store these pairings in localStorage to be used as the actual first round
+    localStorage.setItem('firstRoundPairings', JSON.stringify({ boards, bench }))
 
     return { boards, bench }
   }

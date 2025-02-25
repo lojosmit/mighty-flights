@@ -115,23 +115,32 @@ export const Game = () => {
     dispatch(endRound({ boardResults }))
       .unwrap()
       .then((result) => {
-        // Get promoted players (winners from lower boards)
-        const promotedPlayers = Object.entries(game.boards)
-          .filter(([boardId, board]) => {
-            const result = boardResults[boardId]
-            // Only count promotions from lower boards (B, C, etc.)
-            return boardId !== 'A' && result?.winner && board[result.winner]
-          })
-          .flatMap(([_, board]) => {
-            const winner = boardResults[_]?.winner
-            return winner ? board[winner] : []
+        // Get ALL winners, including Board A
+        const allWinners = Object.entries(game.boards)
+          .filter(([boardId]) => boardResults[boardId]?.winner)
+          .flatMap(([boardId, board]) => {
+            const winner = boardResults[boardId].winner
+            return board[winner]
           })
 
-        // Get current board configurations for 1v1 promotion check
+        // Get promoted players (winners from lower boards)
+        const promotedPlayers = allWinners.filter(player => {
+          // Find which board they won on
+          const [winningBoardId] = Object.entries(game.boards).find(([_, board]) => 
+            board.team1.some(p => p.id === player.id) || 
+            board.team2.some(p => p.id === player.id)
+          ) || []
+          // Promote if they won on any board except A
+          return winningBoardId && winningBoardId !== 'A'
+        })
+
+        // Get current board configurations WITH RESULTS for 1v1 promotion check
         const currentBoards = Object.entries(game.boards).map(([boardId, board]) => ({
           boardId,
           team1: board.team1,
-          team2: board.team2
+          team2: board.team2,
+          winner: boardResults[boardId]?.winner,
+          isDove: boardResults[boardId]?.isDove
         }))
 
         // Generate new pairings with the NEXT round number
@@ -139,7 +148,7 @@ export const Game = () => {
           availablePlayers: game.players,
           boardCount: game.boardCount,
           pairingHistory: pairings.games[pairings.currentGameId!],
-          currentRound: result.nextRound, // Use the nextRound from endRound result
+          currentRound: result.nextRound,
           promotedPlayers,
           previousRoundBoards: currentBoards
         })

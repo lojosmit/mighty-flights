@@ -1,13 +1,10 @@
 // All the juicy player types live here! 🎯
 export interface PlayerStats {
-  wins: number
-  losses: number
-  doves: number
-  handicap: number
+  consecutiveWins: number
   benched: number
-  games: number
   lastBenchedRound?: number
-  consecutiveWins?: number  // Track consecutive wins for Board A rotation
+  totalWins: number
+  totalLosses: number
 }
 
 export interface Player {

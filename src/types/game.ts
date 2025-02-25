@@ -5,9 +5,12 @@ export interface TeamAssignment {
   team2: Player[]
   winner?: 'team1' | 'team2'
   isDove?: boolean
-  score?: {
-    team1: number
-    team2: number
+}
+
+export interface BoardResults {
+  [key: string]: {
+    winner: 'team1' | 'team2'
+    isDove?: boolean
   }
 }
 

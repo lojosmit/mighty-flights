@@ -6,13 +6,13 @@ import { describe, test, expect } from '@jest/globals'
 describe('generatePairings', () => {
   // Mock players for testing
   const players: Player[] = [
-    { id: '1', name: 'Michael Scott', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true },
-    { id: '2', name: 'Dwight K. Schrute', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true },
-    { id: '3', name: 'Jim Halpert', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true },
-    { id: '4', name: 'Pam Beesly', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true },
-    { id: '5', name: 'Stanley Hudson', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true },
-    { id: '6', name: 'Kevin Malone', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true },
-    { id: '7', name: 'Andy Bernard', stats: { wins: 0, losses: 0, doves: 0, handicap: 1, benched: 0, games: 0 }, isActive: true }
+    { id: '1', name: 'Michael Scott', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true },
+    { id: '2', name: 'Dwight K. Schrute', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true },
+    { id: '3', name: 'Jim Halpert', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true },
+    { id: '4', name: 'Pam Beesly', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true },
+    { id: '5', name: 'Stanley Hudson', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true },
+    { id: '6', name: 'Kevin Malone', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true },
+    { id: '7', name: 'Andy Bernard', stats: { consecutiveWins: 0, benched: 0, totalWins: 0, totalLosses: 0 }, isActive: true }
   ]
 
   // Test case 1: Board A winners with consecutive wins
